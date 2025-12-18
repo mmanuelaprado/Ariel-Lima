@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Service, Appointment, AppointmentStatus, SiteConfig } from '../types.ts';
 import { supabase } from '../lib/supabase.ts';
 
@@ -20,6 +20,13 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+// Mapeamento de IDs do banco para evitar duplicidade
+const recordIds = {
+  config: null as string | null,
+  services: null as string | null,
+  appointments: null as string | null,
+};
 
 const INITIAL_SERVICES: Service[] = [
   { id: '1', name: 'Manicure Simples', description: 'Cutilagem e esmaltação com acabamento fino e duradouro.' },
@@ -48,86 +55,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoading, setIsLoading] = useState(true);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
-  // Carregar dados do Supabase
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('posts')
-          .select('*')
-          .order('created_at', { ascending: false });
+  // Carregar dados do Supabase ignorando cache
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('id, title, content, image, created_at')
+        .order('created_at', { ascending: false });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data) {
-          const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
-          const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
-          const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
+      if (data) {
+        // Filtra os registros mais recentes de cada tipo
+        const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
+        const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
+        const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
 
-          if (configPost) setSiteConfig(JSON.parse(configPost.content));
-          if (servicesPost) setServices(JSON.parse(servicesPost.content));
-          if (appointmentsPost) setAppointments(JSON.parse(appointmentsPost.content));
+        if (configPost) {
+          recordIds.config = configPost.id;
+          setSiteConfig(JSON.parse(configPost.content));
         }
-      } catch (err) {
-        console.error('Erro ao carregar dados:', err);
-      } finally {
-        setIsLoading(false);
+        if (servicesPost) {
+          recordIds.services = servicesPost.id;
+          setServices(JSON.parse(servicesPost.content));
+        }
+        if (appointmentsPost) {
+          recordIds.appointments = appointmentsPost.id;
+          setAppointments(JSON.parse(appointmentsPost.content));
+        }
       }
-    };
+    } catch (err) {
+      console.error('Erro ao buscar no Supabase:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
   }, []);
 
-  // Helper para salvar no Supabase
-  const saveToSupabase = async (title: string, content: any, image: string = '') => {
+  // Lógica robusta de Salvamento (Update se existir ID, senão Insert)
+  const saveToSupabase = async (type: 'config' | 'services' | 'appointments', content: any, image: string = '') => {
+    const title = `SYSTEM_${type.toUpperCase()}`;
+    const id = recordIds[type];
+    const payload = {
+      title,
+      content: JSON.stringify(content),
+      image,
+    };
+
     try {
-      await supabase
-        .from('posts')
-        .upsert({
-          title,
-          content: JSON.stringify(content),
-          image,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'title' });
+      if (id) {
+        // Tenta atualizar o registro existente
+        const { error } = await supabase
+          .from('posts')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
+      } else {
+        // Se não tem ID mapeado, cria um novo e armazena o ID retornado
+        const { data, error } = await supabase
+          .from('posts')
+          .insert([payload])
+          .select();
+        if (error) throw error;
+        if (data && data[0]) recordIds[type] = data[0].id;
+      }
     } catch (err) {
-      console.error(`Erro ao salvar ${title}:`, err);
+      console.error(`Erro crítico ao salvar ${title}:`, err);
+      // Fallback: tenta inserir se o update falhar por algum motivo
+      await supabase.from('posts').insert([payload]);
     }
   };
 
   const addService = async (s: Omit<Service, 'id'>) => {
     const newServices = [...services, { ...s, id: Date.now().toString() }];
     setServices(newServices);
-    await saveToSupabase('SYSTEM_SERVICES', newServices);
+    await saveToSupabase('services', newServices);
   };
 
   const updateService = async (id: string, s: Omit<Service, 'id'>) => {
     const newServices = services.map(item => item.id === id ? { ...s, id } : item);
     setServices(newServices);
-    await saveToSupabase('SYSTEM_SERVICES', newServices);
+    await saveToSupabase('services', newServices);
   };
 
   const removeService = async (id: string) => {
     const newServices = services.filter(s => s.id !== id);
     setServices(newServices);
-    await saveToSupabase('SYSTEM_SERVICES', newServices);
+    await saveToSupabase('services', newServices);
   };
 
   const addAppointment = async (a: any) => {
-    const newAppointments = [...appointments, { ...a, id: Date.now().toString(), status: AppointmentStatus.PENDING, createdAt: new Date().toISOString() }];
+    const newAppointments = [...appointments, { 
+      ...a, 
+      id: Date.now().toString(), 
+      status: AppointmentStatus.PENDING, 
+      createdAt: new Date().toISOString() 
+    }];
     setAppointments(newAppointments);
-    await saveToSupabase('SYSTEM_APPOINTMENTS', newAppointments);
+    await saveToSupabase('appointments', newAppointments);
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
     const newAppointments = appointments.map(a => a.id === id ? { ...a, status } : a);
     setAppointments(newAppointments);
-    await saveToSupabase('SYSTEM_APPOINTMENTS', newAppointments);
+    await saveToSupabase('appointments', newAppointments);
   };
 
   const updateSiteConfig = async (config: SiteConfig) => {
     setSiteConfig(config);
-    await saveToSupabase('SYSTEM_CONFIG', config, config.logoUrl);
+    await saveToSupabase('config', config, config.logoUrl);
   };
 
   const login = (username: string, password: string) => {
