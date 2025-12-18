@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Service, Appointment, AppointmentStatus, SiteConfig } from '../types.ts';
 import { supabase } from '../lib/supabase.ts';
 
@@ -20,13 +20,6 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-// Mapeamento de IDs do banco para evitar duplicidade
-const recordIds = {
-  config: null as string | null,
-  services: null as string | null,
-  appointments: null as string | null,
-};
 
 const INITIAL_SERVICES: Service[] = [
   { id: '1', name: 'Manicure Simples', description: 'Cutilagem e esmaltação com acabamento fino e duradouro.' },
@@ -55,7 +48,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoading, setIsLoading] = useState(true);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
-  // Carregar dados do Supabase ignorando cache
+  // Carregar dados do Supabase (Sempre pega o mais recente por título)
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -64,29 +57,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .select('id, title, content, image, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro Supabase Select:', error.message);
+        return;
+      }
 
-      if (data) {
-        // Filtra os registros mais recentes de cada tipo
+      if (data && data.length > 0) {
+        // Como os dados estão ordenados por created_at DESC, 
+        // o primeiro find() de cada tipo retornará a versão mais recente.
         const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
         const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
         const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
 
-        if (configPost) {
-          recordIds.config = configPost.id;
-          setSiteConfig(JSON.parse(configPost.content));
-        }
-        if (servicesPost) {
-          recordIds.services = servicesPost.id;
-          setServices(JSON.parse(servicesPost.content));
-        }
-        if (appointmentsPost) {
-          recordIds.appointments = appointmentsPost.id;
-          setAppointments(JSON.parse(appointmentsPost.content));
-        }
+        if (configPost) setSiteConfig(JSON.parse(configPost.content));
+        if (servicesPost) setServices(JSON.parse(servicesPost.content));
+        if (appointmentsPost) setAppointments(JSON.parse(appointmentsPost.content));
       }
     } catch (err) {
-      console.error('Erro ao buscar no Supabase:', err);
+      console.error('Erro de conexão/parse:', err);
     } finally {
       setIsLoading(false);
     }
@@ -96,56 +84,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchData();
   }, []);
 
-  // Lógica robusta de Salvamento (Update se existir ID, senão Insert)
-  const saveToSupabase = async (type: 'config' | 'services' | 'appointments', content: any, image: string = '') => {
-    const title = `SYSTEM_${type.toUpperCase()}`;
-    const id = recordIds[type];
-    const payload = {
-      title,
-      content: JSON.stringify(content),
-      image,
-    };
-
+  // Lógica de Salvamento: Sempre INSERT para garantir persistência com chaves públicas
+  const saveToSupabase = async (type: 'CONFIG' | 'SERVICES' | 'APPOINTMENTS', content: any, image: string = '') => {
+    const title = `SYSTEM_${type}`;
     try {
-      if (id) {
-        // Tenta atualizar o registro existente
-        const { error } = await supabase
-          .from('posts')
-          .update(payload)
-          .eq('id', id);
-        if (error) throw error;
+      const { error } = await supabase
+        .from('posts')
+        .insert([{
+          title,
+          content: JSON.stringify(content),
+          image: image || ''
+        }]);
+
+      if (error) {
+        console.error(`Erro ao inserir ${title}:`, error.message);
+        alert(`Erro ao salvar no banco: ${error.message}`);
       } else {
-        // Se não tem ID mapeado, cria um novo e armazena o ID retornado
-        const { data, error } = await supabase
-          .from('posts')
-          .insert([payload])
-          .select();
-        if (error) throw error;
-        if (data && data[0]) recordIds[type] = data[0].id;
+        console.log(`${title} salvo com sucesso no Supabase.`);
       }
     } catch (err) {
-      console.error(`Erro crítico ao salvar ${title}:`, err);
-      // Fallback: tenta inserir se o update falhar por algum motivo
-      await supabase.from('posts').insert([payload]);
+      console.error('Erro crítico no saveToSupabase:', err);
     }
   };
 
   const addService = async (s: Omit<Service, 'id'>) => {
     const newServices = [...services, { ...s, id: Date.now().toString() }];
     setServices(newServices);
-    await saveToSupabase('services', newServices);
+    await saveToSupabase('SERVICES', newServices);
   };
 
   const updateService = async (id: string, s: Omit<Service, 'id'>) => {
     const newServices = services.map(item => item.id === id ? { ...s, id } : item);
     setServices(newServices);
-    await saveToSupabase('services', newServices);
+    await saveToSupabase('SERVICES', newServices);
   };
 
   const removeService = async (id: string) => {
     const newServices = services.filter(s => s.id !== id);
     setServices(newServices);
-    await saveToSupabase('services', newServices);
+    await saveToSupabase('SERVICES', newServices);
   };
 
   const addAppointment = async (a: any) => {
@@ -156,18 +133,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString() 
     }];
     setAppointments(newAppointments);
-    await saveToSupabase('appointments', newAppointments);
+    await saveToSupabase('APPOINTMENTS', newAppointments);
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
     const newAppointments = appointments.map(a => a.id === id ? { ...a, status } : a);
     setAppointments(newAppointments);
-    await saveToSupabase('appointments', newAppointments);
+    await saveToSupabase('APPOINTMENTS', newAppointments);
   };
 
   const updateSiteConfig = async (config: SiteConfig) => {
     setSiteConfig(config);
-    await saveToSupabase('config', config, config.logoUrl);
+    // Salvamos a logo tanto no JSON do content quanto no campo image da tabela
+    await saveToSupabase('CONFIG', config, config.logoUrl);
   };
 
   const login = (username: string, password: string) => {
