@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { AppProvider } from './context/AppContext';
-import { Home } from './pages/Home';
-import { AdminDashboard } from './pages/AdminDashboard';
+import { AppProvider } from './context/AppContext.tsx';
+import { Home } from './pages/Home.tsx';
+import { AdminDashboard } from './pages/AdminDashboard.tsx';
 
 const App: React.FC = () => {
   // Estado para controlar a rota atual baseada no hash (#home ou #admin)

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Service, Appointment, AppointmentStatus, SiteConfig } from '../types';
+import { Service, Appointment, AppointmentStatus, SiteConfig } from '../types.ts';
 
 interface AppContextType {
   services: Service[];
@@ -79,22 +79,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setServices(services.map(item => item.id === id ? { ...s, id } : item));
   };
 
-  const removeService = (id: string) => {
-    setServices(services.filter(s => s.id !== id));
-  };
-
-  const addAppointment = (a: Omit<Appointment, 'id' | 'status' | 'createdAt'>) => {
-    setAppointments([
-      ...appointments,
-      {
-        ...a,
-        id: Date.now().toString(),
-        status: AppointmentStatus.PENDING,
-        createdAt: new Date().toISOString()
-      }
-    ]);
-  };
-
   const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
     setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
   };
@@ -120,8 +104,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       services, appointments, siteConfig,
-      addService, updateService, removeService,
-      addAppointment, updateAppointmentStatus, updateSiteConfig,
+      addService, updateService, removeService: (id: string) => setServices(services.filter(s => s.id !== id)),
+      addAppointment: (a: any) => setAppointments([...appointments, { ...a, id: Date.now().toString(), status: AppointmentStatus.PENDING, createdAt: new Date().toISOString() }]), 
+      updateAppointmentStatus, updateSiteConfig,
       isAdminLoggedIn, login, logout
     }}>
       {children}

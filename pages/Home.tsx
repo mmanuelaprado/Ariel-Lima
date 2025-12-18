@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { Calendar } from '../components/Calendar';
+import { useApp } from '../context/AppContext.tsx';
+import { Calendar } from '../components/Calendar.tsx';
 
 export const Home: React.FC = () => {
   const { services, siteConfig, addAppointment } = useApp();

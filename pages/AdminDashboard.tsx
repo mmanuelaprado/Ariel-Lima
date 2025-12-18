@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
-import { AppointmentStatus, SiteConfig } from '../types';
+import { useApp } from '../context/AppContext.tsx';
+import { AppointmentStatus, SiteConfig } from '../types.ts';
 
 export const AdminDashboard: React.FC = () => {
   const { 
