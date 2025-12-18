@@ -12,26 +12,34 @@ export const Home: React.FC = () => {
     whatsapp: '',
     serviceId: ''
   });
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !formData.name || !formData.whatsapp || !formData.serviceId) return;
 
-    await addAppointment({
+    setStatus('loading');
+    
+    const success = await addAppointment({
       clientName: formData.name,
       clientWhatsapp: formData.whatsapp,
       serviceId: formData.serviceId,
       date: selectedDate.toISOString()
     });
     
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setShowBooking(false);
-      setSelectedDate(null);
-      setFormData({ name: '', whatsapp: '', serviceId: '' });
-    }, 3000);
+    if (success) {
+      setStatus('success');
+      setTimeout(() => {
+        setStatus('idle');
+        setShowBooking(false);
+        setSelectedDate(null);
+        setFormData({ name: '', whatsapp: '', serviceId: '' });
+      }, 3000);
+    } else {
+      setStatus('error');
+      alert('Houve um problema ao salvar seu agendamento no servidor. Por favor, tente novamente ou entre em contato pelo WhatsApp.');
+      setStatus('idle');
+    }
   };
 
   const navigateToAdmin = (e: React.MouseEvent) => {
@@ -176,13 +184,13 @@ export const Home: React.FC = () => {
             </button>
 
             <div className="p-6 md:p-10">
-              {submitted ? (
-                <div className="py-12 text-center">
+              {status === 'success' ? (
+                <div className="py-12 text-center animate-in zoom-in duration-300">
                   <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold text-pink-900 mb-2">Enviado com sucesso!</h3>
-                  <p className="text-gray-500 text-sm font-semibold">Aguarde o contato no WhatsApp.</p>
+                  <h3 className="text-xl font-bold text-pink-900 mb-2">Solicitado com Sucesso!</h3>
+                  <p className="text-gray-500 text-sm font-semibold">Aguarde nossa confirmação pelo WhatsApp.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -194,7 +202,7 @@ export const Home: React.FC = () => {
                     <h3 className="text-xl font-bold text-pink-900 mb-4 tracking-tight text-center md:text-left">Seus Dados</h3>
                     <form onSubmit={handleBookingSubmit} className="space-y-4">
                       <div className="space-y-1">
-                        <label className="block text-[10px] font-bold text-pink-300 uppercase tracking-widest ml-1">Nome</label>
+                        <label className="block text-[10px] font-bold text-pink-300 uppercase tracking-widest ml-1">Nome Completo</label>
                         <input 
                           required
                           type="text" 
@@ -205,18 +213,18 @@ export const Home: React.FC = () => {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="block text-[10px] font-bold text-pink-300 uppercase tracking-widest ml-1">WhatsApp</label>
+                        <label className="block text-[10px] font-bold text-pink-300 uppercase tracking-widest ml-1">WhatsApp de Contato</label>
                         <input 
                           required
                           type="tel" 
                           value={formData.whatsapp}
                           onChange={e => setFormData({...formData, whatsapp: e.target.value})}
                           className="w-full px-4 py-3 rounded-xl border border-pink-50 bg-pink-50/20 focus:bg-white focus:ring-4 focus:ring-pink-100 outline-none transition-all font-bold text-sm"
-                          placeholder="(00) 00000-0000"
+                          placeholder="(71) 00000-0000"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="block text-[10px] font-bold text-pink-300 uppercase tracking-widest ml-1">Serviço</label>
+                        <label className="block text-[10px] font-bold text-pink-300 uppercase tracking-widest ml-1">Escolha o Procedimento</label>
                         <select 
                           required
                           value={formData.serviceId}
@@ -232,10 +240,14 @@ export const Home: React.FC = () => {
                       <div className="pt-2">
                         <button 
                           type="submit"
-                          disabled={!selectedDate}
-                          className="w-full bg-pink-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100 hover:bg-pink-700 transition-all transform active:scale-95 disabled:bg-gray-200 disabled:shadow-none disabled:cursor-not-allowed uppercase tracking-widest text-xs"
+                          disabled={!selectedDate || status === 'loading'}
+                          className="w-full bg-pink-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100 hover:bg-pink-700 transition-all transform active:scale-95 disabled:bg-gray-200 disabled:shadow-none disabled:cursor-not-allowed uppercase tracking-widest text-xs flex items-center justify-center"
                         >
-                          Agendar Agora
+                          {status === 'loading' ? (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          ) : (
+                            'Enviar Solicitação'
+                          )}
                         </button>
                       </div>
                     </form>

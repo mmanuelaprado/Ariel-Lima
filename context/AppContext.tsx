@@ -12,7 +12,7 @@ interface AppContextType {
   addService: (service: Omit<Service, 'id'>) => Promise<void>;
   updateService: (id: string, service: Omit<Service, 'id'>) => Promise<void>;
   removeService: (id: string) => Promise<void>;
-  addAppointment: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt'>) => Promise<void>;
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt'>) => Promise<boolean>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   updateSiteConfig: (config: SiteConfig) => Promise<void>;
   isAdminLoggedIn: boolean;
@@ -53,7 +53,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. Carregamento rápido do LocalStorage
+      // 1. Carregamento rápido do LocalStorage para evitar tela branca
       const localServices = localStorage.getItem('nails_services');
       const localConfig = localStorage.getItem('nails_config');
       const localAppointments = localStorage.getItem('nails_appointments');
@@ -65,33 +65,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 2. Sincronização com Supabase
       const { data, error } = await supabase
         .from('posts')
-        .select('title, content, image, created_at')
+        .select('title, content, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       if (data && data.length > 0) {
+        // Buscamos as versões mais recentes de cada "tipo" de dado no banco
         const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
         const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
         const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
 
-        if (configPost) {
-          setSiteConfig(JSON.parse(configPost.content));
+        if (configPost && configPost.content) {
+          const parsed = JSON.parse(configPost.content);
+          setSiteConfig(parsed);
           localStorage.setItem('nails_config', configPost.content);
         }
-        if (servicesPost) {
-          setServices(JSON.parse(servicesPost.content));
+        if (servicesPost && servicesPost.content) {
+          const parsed = JSON.parse(servicesPost.content);
+          setServices(parsed);
           localStorage.setItem('nails_services', servicesPost.content);
         }
-        if (appointmentsPost) {
-          setAppointments(JSON.parse(appointmentsPost.content));
+        if (appointmentsPost && appointmentsPost.content) {
+          const parsed = JSON.parse(appointmentsPost.content);
+          setAppointments(parsed);
           localStorage.setItem('nails_appointments', appointmentsPost.content);
         }
       }
       setDbError(null);
     } catch (err: any) {
-      console.warn('Modo Offline/RLS:', err.message);
-      setDbError(err.message === 'Failed to fetch' ? 'Erro de conexão' : err.message);
+      console.warn('Sync failed, using local data:', err.message);
+      setDbError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -101,33 +105,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchData();
   }, []);
 
-  const saveToSupabase = async (type: 'CONFIG' | 'SERVICES' | 'APPOINTMENTS', content: any) => {
+  const saveToSupabase = async (type: 'CONFIG' | 'SERVICES' | 'APPOINTMENTS', content: any): Promise<boolean> => {
     const title = `SYSTEM_${type}`;
     const jsonContent = JSON.stringify(content);
-    const imageUrl = type === 'CONFIG' ? (content as SiteConfig).logoUrl : '';
     
+    // Salva localmente primeiro (garante que o usuário veja a mudança na hora)
     localStorage.setItem(`nails_${type.toLowerCase()}`, jsonContent);
 
     try {
+      // Usamos apenas title e content para garantir compatibilidade com qualquer tabela 'posts'
       const { error } = await supabase
         .from('posts')
         .insert([{ 
           title, 
-          content: jsonContent,
-          image: imageUrl || '' 
+          content: jsonContent
         }]);
 
       if (error) {
+        console.error('Erro detalhado do Supabase:', error);
         if (error.message.includes('row-level security')) {
           setDbError('RLS_ERROR');
         } else {
           setDbError(error.message);
         }
-      } else {
-        setDbError(null);
+        return false;
       }
+      
+      setDbError(null);
+      return true;
     } catch (err) {
-      console.error('Network error during save');
+      console.error('Erro de rede ao salvar no Supabase:', err);
+      return false;
     }
   };
 
@@ -149,15 +157,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await saveToSupabase('SERVICES', newServices);
   };
 
-  const addAppointment = async (a: any) => {
-    const newAppointments = [...appointments, { 
+  const addAppointment = async (a: any): Promise<boolean> => {
+    const newAppointment = { 
       ...a, 
       id: Date.now().toString(), 
       status: AppointmentStatus.PENDING, 
       createdAt: new Date().toISOString() 
-    }];
-    setAppointments(newAppointments);
-    await saveToSupabase('APPOINTMENTS', newAppointments);
+    };
+    
+    const newAppointments = [...appointments, newAppointment];
+    
+    // Tentamos salvar no Supabase
+    const success = await saveToSupabase('APPOINTMENTS', newAppointments);
+    
+    if (success) {
+      setAppointments(newAppointments);
+      return true;
+    } else {
+      // Se falhar no banco, ainda mantemos no estado local para esta sessão
+      // mas avisamos o componente para não mostrar "sucesso total" se necessário
+      setAppointments(newAppointments);
+      return false; 
+    }
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
