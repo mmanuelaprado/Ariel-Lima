@@ -1,17 +1,19 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Service, Appointment, AppointmentStatus, SiteConfig } from '../types.ts';
+import { supabase } from '../lib/supabase.ts';
 
 interface AppContextType {
   services: Service[];
   appointments: Appointment[];
   siteConfig: SiteConfig;
-  addService: (service: Omit<Service, 'id'>) => void;
-  updateService: (id: string, service: Omit<Service, 'id'>) => void;
-  removeService: (id: string) => void;
-  addAppointment: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt'>) => void;
-  updateAppointmentStatus: (id: string, status: AppointmentStatus) => void;
-  updateSiteConfig: (config: SiteConfig) => void;
+  isLoading: boolean;
+  addService: (service: Omit<Service, 'id'>) => Promise<void>;
+  updateService: (id: string, service: Omit<Service, 'id'>) => Promise<void>;
+  removeService: (id: string) => Promise<void>;
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt'>) => Promise<void>;
+  updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
+  updateSiteConfig: (config: SiteConfig) => Promise<void>;
   isAdminLoggedIn: boolean;
   login: (username: string, password: string) => boolean;
   logout: () => void;
@@ -20,96 +22,129 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const INITIAL_SERVICES: Service[] = [
-  { id: '1', name: 'Manicure Simples', description: 'Cutilagem e esmaltação tradicional com acabamento impecável.' },
-  { id: '2', name: 'Alongamento em Gel', description: 'Extensão de alta resistência com curvatura C natural.' },
-  { id: '3', name: 'Banho de Gel', description: 'Camada protetora para fortalecer e dar brilho às unhas naturais.' },
-  { id: '4', name: 'Nail Art Luxo', description: 'Decorações personalizadas, pedrarias e desenhos feitos à mão.' },
+  { id: '1', name: 'Manicure Simples', description: 'Cutilagem e esmaltação com acabamento fino e duradouro.' },
+  { id: '2', name: 'Alongamento em Gel', description: 'Técnica de extensão com naturalidade e resistência extrema.' },
+  { id: '3', name: 'Banho de Gel', description: 'Fortalecimento das unhas naturais com brilho espelhado.' },
+  { id: '4', name: 'Nail Art Exclusiva', description: 'Decorações feitas à mão para um visual único.' },
 ];
-
-// Logo convertida para base64 para garantir carregamento imediato
-const DEFAULT_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAIBAQIeDAREAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECBA1ADRBRAhMRIhRhcRRTIPBicIChJWNy4fEx4R-R-U-8-W-GlfF84SUpLTE1OT1NRYXF1Z3X29nZ2hpa3d3h3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/aAAwDAQACEQMRAD8A/9k="; // String base64 resumida para exemplo, substitua pela completa se necessário. No ambiente real o usuário faz o upload.
 
 const INITIAL_CONFIG: SiteConfig = {
   professionalName: 'Ariel Lima',
-  logoUrl: 'https://i.ibb.co/3ykGPh9/ariel-lima-logo.png', // URL de exemplo ou base64 da imagem enviada
+  logoUrl: 'https://i.ibb.co/3ykGPh9/ariel-lima-logo.png',
   whatsappNumber: '71996463245',
-  address: 'Rua das Flores, 123 - Centro, Salvador/BA',
+  address: 'Atendimento em Salvador/BA',
   heroTitle: 'Unhas impecáveis, autoestima renovada',
-  heroSubtitle: 'Especialista em design de unhas e alongamentos que realçam sua beleza única.',
-  servicesTitle: 'Nossos Procedimentos',
+  heroSubtitle: 'Especialista em design de unhas e alongamentos que realçam sua beleza única através de técnicas modernas e seguras.',
+  servicesTitle: 'Meus Procedimentos',
   contactTitle: 'Agende seu Momento',
   footerName: 'Manuela Prado',
   footerContact: '719-9646-3245'
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [services, setServices] = useState<Service[]>(() => {
-    const saved = localStorage.getItem('manicure_services_v11');
-    return saved ? JSON.parse(saved) : INITIAL_SERVICES;
-  });
+  const [services, setServices] = useState<Service[]>(INITIAL_SERVICES);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>(INITIAL_CONFIG);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
-  const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = localStorage.getItem('manicure_appointments_v11');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => {
-    const saved = localStorage.getItem('manicure_config_v11');
-    return saved ? JSON.parse(saved) : INITIAL_CONFIG;
-  });
-
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
-    return localStorage.getItem('manicure_admin_session') === 'true';
-  });
-
+  // Carregar dados do Supabase
   useEffect(() => {
-    localStorage.setItem('manicure_services_v11', JSON.stringify(services));
-  }, [services]);
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-  useEffect(() => {
-    localStorage.setItem('manicure_appointments_v11', JSON.stringify(appointments));
-  }, [appointments]);
+        if (error) throw error;
 
-  useEffect(() => {
-    localStorage.setItem('manicure_config_v11', JSON.stringify(siteConfig));
-  }, [siteConfig]);
+        if (data) {
+          const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
+          const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
+          const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
 
-  const addService = (s: Omit<Service, 'id'>) => {
-    setServices([...services, { ...s, id: Date.now().toString() }]);
+          if (configPost) setSiteConfig(JSON.parse(configPost.content));
+          if (servicesPost) setServices(JSON.parse(servicesPost.content));
+          if (appointmentsPost) setAppointments(JSON.parse(appointmentsPost.content));
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Helper para salvar no Supabase
+  const saveToSupabase = async (title: string, content: any, image: string = '') => {
+    try {
+      await supabase
+        .from('posts')
+        .upsert({
+          title,
+          content: JSON.stringify(content),
+          image,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'title' });
+    } catch (err) {
+      console.error(`Erro ao salvar ${title}:`, err);
+    }
   };
 
-  const updateService = (id: string, s: Omit<Service, 'id'>) => {
-    setServices(services.map(item => item.id === id ? { ...s, id } : item));
+  const addService = async (s: Omit<Service, 'id'>) => {
+    const newServices = [...services, { ...s, id: Date.now().toString() }];
+    setServices(newServices);
+    await saveToSupabase('SYSTEM_SERVICES', newServices);
   };
 
-  const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
-    setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
+  const updateService = async (id: string, s: Omit<Service, 'id'>) => {
+    const newServices = services.map(item => item.id === id ? { ...s, id } : item);
+    setServices(newServices);
+    await saveToSupabase('SYSTEM_SERVICES', newServices);
   };
 
-  const updateSiteConfig = (config: SiteConfig) => {
+  const removeService = async (id: string) => {
+    const newServices = services.filter(s => s.id !== id);
+    setServices(newServices);
+    await saveToSupabase('SYSTEM_SERVICES', newServices);
+  };
+
+  const addAppointment = async (a: any) => {
+    const newAppointments = [...appointments, { ...a, id: Date.now().toString(), status: AppointmentStatus.PENDING, createdAt: new Date().toISOString() }];
+    setAppointments(newAppointments);
+    await saveToSupabase('SYSTEM_APPOINTMENTS', newAppointments);
+  };
+
+  const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
+    const newAppointments = appointments.map(a => a.id === id ? { ...a, status } : a);
+    setAppointments(newAppointments);
+    await saveToSupabase('SYSTEM_APPOINTMENTS', newAppointments);
+  };
+
+  const updateSiteConfig = async (config: SiteConfig) => {
     setSiteConfig(config);
+    await saveToSupabase('SYSTEM_CONFIG', config, config.logoUrl);
   };
 
   const login = (username: string, password: string) => {
     if (username === 'mmanuelaprado' && password === 'mp222426') {
       setIsAdminLoggedIn(true);
-      localStorage.setItem('manicure_admin_session', 'true');
       return true;
     }
     return false;
   };
 
-  const logout = () => {
-    setIsAdminLoggedIn(false);
-    localStorage.removeItem('manicure_admin_session');
-  };
+  const logout = () => setIsAdminLoggedIn(false);
 
   return (
     <AppContext.Provider value={{
-      services, appointments, siteConfig,
-      addService, updateService, removeService: (id: string) => setServices(services.filter(s => s.id !== id)),
-      addAppointment: (a: any) => setAppointments([...appointments, { ...a, id: Date.now().toString(), status: AppointmentStatus.PENDING, createdAt: new Date().toISOString() }]), 
-      updateAppointmentStatus, updateSiteConfig,
+      services, appointments, siteConfig, isLoading,
+      addService, updateService, removeService,
+      addAppointment, updateAppointmentStatus, updateSiteConfig,
       isAdminLoggedIn, login, logout
     }}>
       {children}

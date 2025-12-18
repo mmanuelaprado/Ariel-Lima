@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.tsx';
 import { Calendar } from '../components/Calendar.tsx';
 
 export const Home: React.FC = () => {
-  const { services, siteConfig, addAppointment } = useApp();
+  const { services, siteConfig, addAppointment, isLoading } = useApp();
   const [showBooking, setShowBooking] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [formData, setFormData] = useState({
@@ -14,11 +14,11 @@ export const Home: React.FC = () => {
   });
   const [submitted, setSubmitted] = useState(false);
 
-  const handleBookingSubmit = (e: React.FormEvent) => {
+  const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !formData.name || !formData.whatsapp || !formData.serviceId) return;
 
-    addAppointment({
+    await addAppointment({
       clientName: formData.name,
       clientWhatsapp: formData.whatsapp,
       serviceId: formData.serviceId,
@@ -39,9 +39,20 @@ export const Home: React.FC = () => {
     window.location.hash = '#admin';
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-pink-50">
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-pink-200 border-t-pink-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-pink-600 font-bold animate-pulse">Carregando informações...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col selection:bg-pink-200">
-      {/* Header - Compacto e funcional */}
+      {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm border-b border-pink-100">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center">
@@ -52,7 +63,6 @@ export const Home: React.FC = () => {
             )}
           </div>
           
-          {/* Navegação Desktop */}
           <nav className="hidden md:flex items-center space-x-6 font-bold text-gray-600">
             <a href="#servicos" className="hover:text-pink-500 transition-colors uppercase text-[10px] tracking-widest">Serviços</a>
             <a href="#contato" className="hover:text-pink-500 transition-colors uppercase text-[10px] tracking-widest">Contato</a>
@@ -72,7 +82,6 @@ export const Home: React.FC = () => {
             </div>
           </nav>
 
-          {/* Navegação Mobile */}
           <div className="md:hidden flex items-center space-x-2">
             <button 
               onClick={navigateToAdmin}
@@ -90,7 +99,7 @@ export const Home: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero - Reduzido para Mobile First */}
+      {/* Hero */}
       <section className="bg-gradient-to-b from-pink-100 to-pink-50 py-10 md:py-20 relative overflow-hidden">
         <div className="container mx-auto px-4 flex flex-col items-center text-center relative z-10">
           <h1 className="text-3xl md:text-6xl font-extrabold mb-4 text-pink-900 leading-tight tracking-tighter">
@@ -110,7 +119,7 @@ export const Home: React.FC = () => {
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-pink-200/40 rounded-full -ml-32 -mb-32 blur-[80px]"></div>
       </section>
 
-      {/* Services - Compactado significativamente */}
+      {/* Services */}
       <section id="servicos" className="py-8 bg-white">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-2xl md:text-4xl font-extrabold mb-6 text-pink-900 tracking-tight">{siteConfig.servicesTitle}</h2>
@@ -130,7 +139,7 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Contact - Minimalista */}
+      {/* Contact */}
       <section id="contato" className="py-8 bg-pink-50/50">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-2xl font-extrabold mb-6 text-pink-900 tracking-tight">{siteConfig.contactTitle}</h2>
@@ -147,7 +156,7 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Footer - Compacto */}
+      {/* Footer */}
       <footer className="bg-white border-t border-pink-100 py-6 mt-auto">
         <div className="container mx-auto px-4 text-center">
           <p className="text-pink-900 font-extrabold text-lg mb-1 tracking-tight">Desenvolvido por {siteConfig.footerName}</p>
@@ -155,7 +164,7 @@ export const Home: React.FC = () => {
         </div>
       </footer>
 
-      {/* Booking Modal - Mobile Responsive */}
+      {/* Booking Modal */}
       {showBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2 bg-pink-900/20 backdrop-blur-sm">
           <div className="bg-white w-full max-w-3xl max-h-[95vh] overflow-y-auto rounded-3xl shadow-2xl relative animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -238,7 +247,7 @@ export const Home: React.FC = () => {
         </div>
       )}
 
-      {/* Floating WhatsApp - Reduzido */}
+      {/* Floating WhatsApp */}
       <a 
         href={`https://wa.me/${siteConfig.whatsappNumber.replace(/\D/g, '')}`}
         target="_blank"

@@ -7,8 +7,8 @@
     
     <!-- SEO Básico -->
     <title>Ariel Lima Nail Designer | Agendamento Online</title>
-    <meta name="description" content="Especialista em design de unhas, alongamentos e nail art. Agende seu horário com Ariel Lima e renove sua autoestima com unhas impecáveis." />
-    <meta name="keywords" content="manicure, nail designer, alongamento de unhas, unhas de gel, salvador, agendamento online" />
+    <meta name="description" content="Unhas impecáveis, autoestima renovada. Especialista em design de unhas, alongamentos e nail art. Agende seu horário com Ariel Lima." />
+    <meta name="keywords" content="manicure, nail designer, alongamento de unhas, unhas de gel, salvador, agendamento online, unhas perfeitas" />
     <meta name="author" content="Ariel Lima" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://ariellimanails.vercel.app" />
@@ -16,9 +16,11 @@
     <!-- Open Graph / Facebook / Instagram / WhatsApp -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://ariellimanails.vercel.app" />
-    <meta property="og:title" content="Ariel Lima Nail Designer | Agendamento Online" />
-    <meta property="og:description" content="Unhas impecáveis, autoestima renovada. Escolha seu serviço e agende seu horário agora mesmo!" />
-    <meta property="og:image" content="https://ariellimanails.vercel.app/og-image.jpg" />
+    <meta property="og:title" content="Ariel Lima Nail Designer | Agende seu Horário" />
+    <meta property="og:description" content="Especialista em design de unhas e alongamentos que realçam sua beleza única. Clique para agendar!" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/manuelaprado/ariel-nails/main/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:site_name" content="Ariel Lima Nail Designer" />
     <meta property="og:locale" content="pt_BR" />
 
@@ -26,12 +28,12 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://ariellimanails.vercel.app" />
     <meta name="twitter:title" content="Ariel Lima Nail Designer | Agendamento Online" />
-    <meta name="twitter:description" content="Especialista em design de unhas e alongamentos que realçam sua beleza única." />
-    <meta name="twitter:image" content="https://ariellimanails.vercel.app/og-image.jpg" />
+    <meta name="twitter:description" content="Unhas impecáveis e design exclusivo. Agende sua sessão agora mesmo!" />
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/manuelaprado/ariel-nails/main/og-image.jpg" />
 
-    <!-- Favicon e Ícones de Dispositivo -->
-    <link rel="icon" type="image/png" href="https://ariellimanails.vercel.app/favicon.png" />
-    <link rel="apple-touch-icon" href="https://ariellimanails.vercel.app/apple-touch-icon.png" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/manuelaprado/ariel-nails/main/favicon.png" />
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/manuelaprado/ariel-nails/main/apple-touch-icon.png" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -62,13 +64,21 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+      }
     </style>
   <script type="importmap">
 {
   "imports": {
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.7"
   }
 }
 </script>
