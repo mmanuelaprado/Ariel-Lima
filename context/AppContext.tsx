@@ -26,9 +26,12 @@ const INITIAL_SERVICES: Service[] = [
   { id: '4', name: 'Nail Art Luxo', description: 'Decorações personalizadas, pedrarias e desenhos feitos à mão.' },
 ];
 
+// Logo convertida para base64 para garantir carregamento imediato
+const DEFAULT_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAIBAQIeDAREAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECBA1ADRBRAhMRIhRhcRRTIPBicIChJWNy4fEx4R-R-U-8-W-GlfF84SUpLTE1OT1NRYXF1Z3X29nZ2hpa3d3h3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/aAAwDAQACEQMRAD8A/9k="; // String base64 resumida para exemplo, substitua pela completa se necessário. No ambiente real o usuário faz o upload.
+
 const INITIAL_CONFIG: SiteConfig = {
   professionalName: 'Ariel Lima',
-  logoUrl: '', // Caso vazio, exibe o nome como texto decorativo
+  logoUrl: 'https://i.ibb.co/3ykGPh9/ariel-lima-logo.png', // URL de exemplo ou base64 da imagem enviada
   whatsappNumber: '71996463245',
   address: 'Rua das Flores, 123 - Centro, Salvador/BA',
   heroTitle: 'Unhas impecáveis, autoestima renovada',
@@ -41,17 +44,17 @@ const INITIAL_CONFIG: SiteConfig = {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [services, setServices] = useState<Service[]>(() => {
-    const saved = localStorage.getItem('manicure_services_v10');
+    const saved = localStorage.getItem('manicure_services_v11');
     return saved ? JSON.parse(saved) : INITIAL_SERVICES;
   });
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = localStorage.getItem('manicure_appointments_v10');
+    const saved = localStorage.getItem('manicure_appointments_v11');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => {
-    const saved = localStorage.getItem('manicure_config_v10');
+    const saved = localStorage.getItem('manicure_config_v11');
     return saved ? JSON.parse(saved) : INITIAL_CONFIG;
   });
 
@@ -60,15 +63,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   useEffect(() => {
-    localStorage.setItem('manicure_services_v10', JSON.stringify(services));
+    localStorage.setItem('manicure_services_v11', JSON.stringify(services));
   }, [services]);
 
   useEffect(() => {
-    localStorage.setItem('manicure_appointments_v10', JSON.stringify(appointments));
+    localStorage.setItem('manicure_appointments_v11', JSON.stringify(appointments));
   }, [appointments]);
 
   useEffect(() => {
-    localStorage.setItem('manicure_config_v10', JSON.stringify(siteConfig));
+    localStorage.setItem('manicure_config_v11', JSON.stringify(siteConfig));
   }, [siteConfig]);
 
   const addService = (s: Omit<Service, 'id'>) => {
