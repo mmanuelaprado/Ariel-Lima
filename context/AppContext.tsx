@@ -8,6 +8,7 @@ interface AppContextType {
   appointments: Appointment[];
   siteConfig: SiteConfig;
   isLoading: boolean;
+  dbError: string | null;
   addService: (service: Omit<Service, 'id'>) => Promise<void>;
   updateService: (id: string, service: Omit<Service, 'id'>) => Promise<void>;
   removeService: (id: string) => Promise<void>;
@@ -46,35 +47,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(INITIAL_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
-  // Carregar dados do Supabase (Sempre pega o mais recente por título)
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      // 1. Carregamento rápido do LocalStorage
+      const localServices = localStorage.getItem('nails_services');
+      const localConfig = localStorage.getItem('nails_config');
+      const localAppointments = localStorage.getItem('nails_appointments');
+
+      if (localServices) setServices(JSON.parse(localServices));
+      if (localConfig) setSiteConfig(JSON.parse(localConfig));
+      if (localAppointments) setAppointments(JSON.parse(localAppointments));
+
+      // 2. Sincronização com Supabase
       const { data, error } = await supabase
         .from('posts')
-        .select('id, title, content, image, created_at')
+        .select('title, content, image, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Erro Supabase Select:', error.message);
-        return;
-      }
+      if (error) throw error;
 
       if (data && data.length > 0) {
-        // Como os dados estão ordenados por created_at DESC, 
-        // o primeiro find() de cada tipo retornará a versão mais recente.
         const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
         const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
         const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
 
-        if (configPost) setSiteConfig(JSON.parse(configPost.content));
-        if (servicesPost) setServices(JSON.parse(servicesPost.content));
-        if (appointmentsPost) setAppointments(JSON.parse(appointmentsPost.content));
+        if (configPost) {
+          setSiteConfig(JSON.parse(configPost.content));
+          localStorage.setItem('nails_config', configPost.content);
+        }
+        if (servicesPost) {
+          setServices(JSON.parse(servicesPost.content));
+          localStorage.setItem('nails_services', servicesPost.content);
+        }
+        if (appointmentsPost) {
+          setAppointments(JSON.parse(appointmentsPost.content));
+          localStorage.setItem('nails_appointments', appointmentsPost.content);
+        }
       }
-    } catch (err) {
-      console.error('Erro de conexão/parse:', err);
+      setDbError(null);
+    } catch (err: any) {
+      console.warn('Modo Offline/RLS:', err.message);
+      setDbError(err.message === 'Failed to fetch' ? 'Erro de conexão' : err.message);
     } finally {
       setIsLoading(false);
     }
@@ -84,26 +101,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchData();
   }, []);
 
-  // Lógica de Salvamento: Sempre INSERT para garantir persistência com chaves públicas
-  const saveToSupabase = async (type: 'CONFIG' | 'SERVICES' | 'APPOINTMENTS', content: any, image: string = '') => {
+  const saveToSupabase = async (type: 'CONFIG' | 'SERVICES' | 'APPOINTMENTS', content: any) => {
     const title = `SYSTEM_${type}`;
+    const jsonContent = JSON.stringify(content);
+    const imageUrl = type === 'CONFIG' ? (content as SiteConfig).logoUrl : '';
+    
+    localStorage.setItem(`nails_${type.toLowerCase()}`, jsonContent);
+
     try {
       const { error } = await supabase
         .from('posts')
-        .insert([{
-          title,
-          content: JSON.stringify(content),
-          image: image || ''
+        .insert([{ 
+          title, 
+          content: jsonContent,
+          image: imageUrl || '' 
         }]);
 
       if (error) {
-        console.error(`Erro ao inserir ${title}:`, error.message);
-        alert(`Erro ao salvar no banco: ${error.message}`);
+        if (error.message.includes('row-level security')) {
+          setDbError('RLS_ERROR');
+        } else {
+          setDbError(error.message);
+        }
       } else {
-        console.log(`${title} salvo com sucesso no Supabase.`);
+        setDbError(null);
       }
     } catch (err) {
-      console.error('Erro crítico no saveToSupabase:', err);
+      console.error('Network error during save');
     }
   };
 
@@ -144,8 +168,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateSiteConfig = async (config: SiteConfig) => {
     setSiteConfig(config);
-    // Salvamos a logo tanto no JSON do content quanto no campo image da tabela
-    await saveToSupabase('CONFIG', config, config.logoUrl);
+    await saveToSupabase('CONFIG', config);
   };
 
   const login = (username: string, password: string) => {
@@ -160,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      services, appointments, siteConfig, isLoading,
+      services, appointments, siteConfig, isLoading, dbError,
       addService, updateService, removeService,
       addAppointment, updateAppointmentStatus, updateSiteConfig,
       isAdminLoggedIn, login, logout
