@@ -11,12 +11,18 @@ export interface Service {
   description: string;
 }
 
+export interface BlockedSlot {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:mm (se ausente, o dia todo está bloqueado)
+}
+
 export interface Appointment {
   id: string;
   clientName: string;
   clientWhatsapp: string;
   serviceId: string;
-  date: string; // ISO format
+  date: string; // ISO format (data + hora)
   status: AppointmentStatus;
   createdAt: string;
 }

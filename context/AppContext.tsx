@@ -1,11 +1,12 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Service, Appointment, AppointmentStatus, SiteConfig } from '../types.ts';
+import { Service, Appointment, AppointmentStatus, SiteConfig, BlockedSlot } from '../types.ts';
 import { supabase } from '../lib/supabase.ts';
 
 interface AppContextType {
   services: Service[];
   appointments: Appointment[];
+  blockedSlots: BlockedSlot[];
   siteConfig: SiteConfig;
   isLoading: boolean;
   dbError: string | null;
@@ -15,6 +16,7 @@ interface AppContextType {
   addAppointment: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt'>) => Promise<boolean>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   updateSiteConfig: (config: SiteConfig) => Promise<void>;
+  toggleBlockedSlot: (slot: Omit<BlockedSlot, 'id'>) => Promise<void>;
   isAdminLoggedIn: boolean;
   login: (username: string, password: string) => boolean;
   logout: () => void;
@@ -45,6 +47,7 @@ const INITIAL_CONFIG: SiteConfig = {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [services, setServices] = useState<Service[]>(INITIAL_SERVICES);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(INITIAL_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
@@ -53,48 +56,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. Carregamento rápido do LocalStorage para evitar tela branca
-      const localServices = localStorage.getItem('nails_services');
-      const localConfig = localStorage.getItem('nails_config');
-      const localAppointments = localStorage.getItem('nails_appointments');
-
-      if (localServices) setServices(JSON.parse(localServices));
-      if (localConfig) setSiteConfig(JSON.parse(localConfig));
-      if (localAppointments) setAppointments(JSON.parse(localAppointments));
-
-      // 2. Sincronização com Supabase
       const { data, error } = await supabase
         .from('posts')
-        .select('title, content, created_at')
+        .select('title, content')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        // Buscamos as versões mais recentes de cada "tipo" de dado no banco
+      if (data) {
         const configPost = data.find(p => p.title === 'SYSTEM_CONFIG');
         const servicesPost = data.find(p => p.title === 'SYSTEM_SERVICES');
         const appointmentsPost = data.find(p => p.title === 'SYSTEM_APPOINTMENTS');
+        const blockedPost = data.find(p => p.title === 'SYSTEM_BLOCKED');
 
-        if (configPost && configPost.content) {
-          const parsed = JSON.parse(configPost.content);
-          setSiteConfig(parsed);
-          localStorage.setItem('nails_config', configPost.content);
-        }
-        if (servicesPost && servicesPost.content) {
-          const parsed = JSON.parse(servicesPost.content);
-          setServices(parsed);
-          localStorage.setItem('nails_services', servicesPost.content);
-        }
-        if (appointmentsPost && appointmentsPost.content) {
-          const parsed = JSON.parse(appointmentsPost.content);
-          setAppointments(parsed);
-          localStorage.setItem('nails_appointments', appointmentsPost.content);
-        }
+        if (configPost) setSiteConfig(JSON.parse(configPost.content));
+        if (servicesPost) setServices(JSON.parse(servicesPost.content));
+        if (appointmentsPost) setAppointments(JSON.parse(appointmentsPost.content));
+        if (blockedPost) setBlockedSlots(JSON.parse(blockedPost.content));
       }
-      setDbError(null);
     } catch (err: any) {
-      console.warn('Sync failed, using local data:', err.message);
       setDbError(err.message);
     } finally {
       setIsLoading(false);
@@ -105,86 +85,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchData();
   }, []);
 
-  const saveToSupabase = async (type: 'CONFIG' | 'SERVICES' | 'APPOINTMENTS', content: any): Promise<boolean> => {
-    const title = `SYSTEM_${type}`;
-    const jsonContent = JSON.stringify(content);
-    
-    // Salva localmente primeiro (garante que o usuário veja a mudança na hora)
-    localStorage.setItem(`nails_${type.toLowerCase()}`, jsonContent);
-
-    try {
-      // Usamos apenas title e content para garantir compatibilidade com qualquer tabela 'posts'
-      const { error } = await supabase
-        .from('posts')
-        .insert([{ 
-          title, 
-          content: jsonContent
-        }]);
-
-      if (error) {
-        console.error('Erro detalhado do Supabase:', error);
-        if (error.message.includes('row-level security')) {
-          setDbError('RLS_ERROR');
-        } else {
-          setDbError(error.message);
-        }
-        return false;
-      }
-      
-      setDbError(null);
-      return true;
-    } catch (err) {
-      console.error('Erro de rede ao salvar no Supabase:', err);
-      return false;
-    }
+  const saveToSupabase = async (type: string, content: any) => {
+    await supabase.from('posts').insert([{ title: `SYSTEM_${type}`, content: JSON.stringify(content) }]);
   };
 
-  const addService = async (s: Omit<Service, 'id'>) => {
-    const newServices = [...services, { ...s, id: Date.now().toString() }];
-    setServices(newServices);
-    await saveToSupabase('SERVICES', newServices);
+  const addService = async (s: any) => {
+    const next = [...services, { ...s, id: Date.now().toString() }];
+    setServices(next);
+    await saveToSupabase('SERVICES', next);
   };
 
-  const updateService = async (id: string, s: Omit<Service, 'id'>) => {
-    const newServices = services.map(item => item.id === id ? { ...s, id } : item);
-    setServices(newServices);
-    await saveToSupabase('SERVICES', newServices);
+  const updateService = async (id: string, s: any) => {
+    const next = services.map(x => x.id === id ? { ...s, id } : x);
+    setServices(next);
+    await saveToSupabase('SERVICES', next);
   };
 
   const removeService = async (id: string) => {
-    const newServices = services.filter(s => s.id !== id);
-    setServices(newServices);
-    await saveToSupabase('SERVICES', newServices);
+    const next = services.filter(x => x.id !== id);
+    setServices(next);
+    await saveToSupabase('SERVICES', next);
   };
 
-  const addAppointment = async (a: any): Promise<boolean> => {
-    const newAppointment = { 
-      ...a, 
-      id: Date.now().toString(), 
-      status: AppointmentStatus.PENDING, 
-      createdAt: new Date().toISOString() 
-    };
-    
-    const newAppointments = [...appointments, newAppointment];
-    
-    // Tentamos salvar no Supabase
-    const success = await saveToSupabase('APPOINTMENTS', newAppointments);
-    
-    if (success) {
-      setAppointments(newAppointments);
-      return true;
-    } else {
-      // Se falhar no banco, ainda mantemos no estado local para esta sessão
-      // mas avisamos o componente para não mostrar "sucesso total" se necessário
-      setAppointments(newAppointments);
-      return false; 
-    }
+  const addAppointment = async (a: any) => {
+    const next = [...appointments, { ...a, id: Date.now().toString(), status: AppointmentStatus.PENDING, createdAt: new Date().toISOString() }];
+    setAppointments(next);
+    await saveToSupabase('APPOINTMENTS', next);
+    return true;
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
-    const newAppointments = appointments.map(a => a.id === id ? { ...a, status } : a);
-    setAppointments(newAppointments);
-    await saveToSupabase('APPOINTMENTS', newAppointments);
+    const next = appointments.map(a => a.id === id ? { ...a, status } : a);
+    setAppointments(next);
+    await saveToSupabase('APPOINTMENTS', next);
   };
 
   const updateSiteConfig = async (config: SiteConfig) => {
@@ -192,22 +125,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await saveToSupabase('CONFIG', config);
   };
 
-  const login = (username: string, password: string) => {
-    if (username === 'mmanuelaprado' && password === 'mp222426') {
+  const toggleBlockedSlot = async (slot: Omit<BlockedSlot, 'id'>) => {
+    let next;
+    const exists = blockedSlots.find(b => b.date === slot.date && b.time === slot.time);
+    if (exists) {
+      next = blockedSlots.filter(b => b.id !== exists.id);
+    } else {
+      next = [...blockedSlots, { ...slot, id: Date.now().toString() }];
+    }
+    setBlockedSlots(next);
+    await saveToSupabase('BLOCKED', next);
+  };
+
+  const login = (u: string, p: string) => {
+    if (u === 'mmanuelaprado' && p === 'mp222426') {
       setIsAdminLoggedIn(true);
       return true;
     }
     return false;
   };
 
-  const logout = () => setIsAdminLoggedIn(false);
-
   return (
     <AppContext.Provider value={{
-      services, appointments, siteConfig, isLoading, dbError,
-      addService, updateService, removeService,
-      addAppointment, updateAppointmentStatus, updateSiteConfig,
-      isAdminLoggedIn, login, logout
+      services, appointments, blockedSlots, siteConfig, isLoading, dbError,
+      addService, updateService, removeService, addAppointment, updateAppointmentStatus,
+      updateSiteConfig, toggleBlockedSlot, isAdminLoggedIn, login, logout: () => setIsAdminLoggedIn(false)
     }}>
       {children}
     </AppContext.Provider>
