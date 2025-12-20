@@ -28,6 +28,7 @@ export interface Appointment {
 }
 
 export interface SiteConfig {
+  companyName: string;
   professionalName: string;
   logoUrl: string;
   whatsappNumber: string;

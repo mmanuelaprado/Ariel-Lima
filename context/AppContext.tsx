@@ -32,6 +32,7 @@ const INITIAL_SERVICES: Service[] = [
 ];
 
 const INITIAL_CONFIG: SiteConfig = {
+  companyName: 'Ariel Lima Nail Designer',
   professionalName: 'Ariel Lima',
   logoUrl: 'https://i.ibb.co/3ykGPh9/ariel-lima-logo.png',
   whatsappNumber: '71996463245',
